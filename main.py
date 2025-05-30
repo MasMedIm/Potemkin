@@ -7,6 +7,7 @@ from flask import Flask, jsonify, send_file, request, send_from_directory
 from reportlab.pdfgen import canvas
 from dotenv import load_dotenv
 import re
+from PyPDF2 import PdfReader, PdfWriter
 import requests
 from openai import OpenAI
 
@@ -121,24 +122,66 @@ def analysis():
 
 @app.route('/api/export-pdf')
 def export_pdf():
-    # Load latest analysis data (last run) or fallback to stub
+    """
+    Export a PDF report by using the SpotCheck Sample report.pdf as a skeleton,
+    then appending a page with the latest analysis cards.
+    """
+    # Load latest analysis cards
+    cards = STUB_DATA
+    path = os.path.join(DATA_DIR, 'last_analysis.json')
     try:
-        path = os.path.join(DATA_DIR, 'last_analysis.json')
         with open(path, 'r') as f:
             data = json.load(f)
-        # Determine if data is list of runs or single run
         if isinstance(data, list):
             if data and isinstance(data[0], list):
                 cards = data[-1]
             elif data and isinstance(data[0], dict):
                 cards = data
-            else:
-                cards = STUB_DATA
-        else:
-            cards = STUB_DATA
     except Exception:
         cards = STUB_DATA
-    # Generate PDF report from cards
+    # Path to skeleton PDF
+    skeleton = os.getenv('SKELETON_PDF', 'SpotCheck Sample report.pdf')
+    try:
+        if os.path.exists(skeleton):
+            reader = PdfReader(skeleton)
+            writer = PdfWriter()
+            # Copy skeleton pages
+            for pg in reader.pages:
+                writer.add_page(pg)
+            # Create analysis page
+            analysis_buf = io.BytesIO()
+            width, height = 595, 842
+            p = canvas.Canvas(analysis_buf, pagesize=(width, height))
+            y = height - 40
+            p.setFont("Helvetica-Bold", 16)
+            p.drawString(40, y, "Analysis Summary")
+            y -= 30
+            p.setFont("Helvetica", 12)
+            for item in cards:
+                p.setFont("Helvetica-Bold", 14)
+                p.drawString(40, y, item.get('title', ''))
+                y -= 20
+                p.setFont("Helvetica", 12)
+                text = item.get('description', '')
+                p.drawString(60, y, text)
+                y -= 30
+                if y < 60:
+                    p.showPage()
+                    y = height - 40
+            p.showPage()
+            p.save()
+            analysis_buf.seek(0)
+            # Append analysis page to writer
+            a_reader = PdfReader(analysis_buf)
+            writer.add_page(a_reader.pages[0])
+            # Output combined PDF
+            out_buf = io.BytesIO()
+            writer.write(out_buf)
+            out_buf.seek(0)
+            return send_file(out_buf, as_attachment=True, download_name='report.pdf', mimetype='application/pdf')
+    except Exception as e:
+        app.logger.error("Error merging skeleton PDF: %s", e, exc_info=True)
+    # Fallback: simple one-page PDF
     buf = io.BytesIO()
     p = canvas.Canvas(buf)
     width, height = 595, 842
