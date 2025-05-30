@@ -275,15 +275,36 @@ def session():
         'Content-Type': 'application/json'
     }
     payload = { 'model': model, 'voice': voice }
-    # Load custom instructions from instructions.txt, if provided
-    instr_file = os.getenv('INSTRUCTIONS_FILE', 'instructions.txt')
+    # Build dynamic instructions from latest analysis and examples
+    context = []
     try:
-        with open(instr_file, 'r', encoding='utf-8') as f:
-            instr = f.read().strip()
-        if instr:
-            payload['instructions'] = instr
-    except FileNotFoundError:
-        pass
+        ctx_path = os.path.join(DATA_DIR, 'last_analysis.json')
+        if os.path.exists(ctx_path):
+            raw = json.load(open(ctx_path, 'r'))
+            if isinstance(raw, list):
+                # list of runs
+                if raw and isinstance(raw[0], list):
+                    context = raw[-1]
+                # single run
+                elif raw and isinstance(raw[0], dict):
+                    context = raw
+    except Exception:
+        context = []
+    examples = (
+        "Examples of queries and ideal responses:\n"
+        "1. Q: How is progress going on my apartments at Hunter’s Point?\n"
+        "A: Progress is in line with the original projections, with December 5th 2025 as the current projected completion date. As of today, the project is 55% complete.\n"
+        "2. Q: Have you identified any safety issues in the last week?\n"
+        "A: No OSHA violations were observed. The forecast for the next week is sunny, so I don’t expect any weather-related risks to prepare for.\n"
+        "3. Q: And how are we doing with the budget?\n"
+        "A: We’re projecting total costs at $34.5 million, which is 98% of the original project budget. At this phase, the wood framing was completed last week, so it’s time to put in orders for windows. The current lead time is 3-4 weeks."
+    )
+    sys_prompt = (
+        "You are an AI assistant specialized in construction site monitoring. "
+        f"Use the following analysis data as context: {json.dumps(context)}. "
+        f"{examples}"
+    )
+    payload['instructions'] = sys_prompt
     try:
         resp = requests.post(url, headers=headers, json=payload, timeout=10)
         resp.raise_for_status()
