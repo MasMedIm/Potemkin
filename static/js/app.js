@@ -65,30 +65,53 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Attach manual analysis trigger
   analyzeBtn.addEventListener('click', fetchAnalysis);
-  // Voice interaction: speak current analysis cards
-  voiceBtn.addEventListener('click', () => {
-    if (!window.speechSynthesis) {
-      alert('Speech Synthesis not supported');
-      return;
+  // Voice interaction: WebRTC real-time speech-to-speech via OpenAI Realtime API
+  voiceBtn.addEventListener('click', async () => {
+    voiceBtn.disabled = true;
+    try {
+      // 1. Get an ephemeral key from our server
+      const tokenRes = await fetch('/session');
+      if (!tokenRes.ok) throw new Error(`Session error: ${tokenRes.status}`);
+      const tokenData = await tokenRes.json();
+      const EPHEMERAL_KEY = tokenData.client_secret?.value;
+      const model = tokenData.model;
+      if (!EPHEMERAL_KEY || !model) throw new Error('Invalid session data');
+      // 2. Create peer connection
+      const pc = new RTCPeerConnection();
+      // 3. Play remote audio from model
+      const audioEl = document.createElement('audio');
+      audioEl.autoplay = true;
+      document.body.appendChild(audioEl);
+      pc.ontrack = e => { audioEl.srcObject = e.streams[0]; };
+      // 4. Add local microphone track
+      const ms = await navigator.mediaDevices.getUserMedia({ audio: true });
+      pc.addTrack(ms.getTracks()[0], ms);
+      // 5. Data channel for events
+      const dc = pc.createDataChannel('oai-events');
+      dc.addEventListener('message', e => {
+        console.log('Realtime event:', e);
+      });
+      // 6. SDP offer/answer exchange
+      const offer = await pc.createOffer();
+      await pc.setLocalDescription(offer);
+      const baseUrl = 'https://api.openai.com/v1/realtime';
+      const sdpRes = await fetch(`${baseUrl}?model=${model}`, {
+        method: 'POST',
+        body: offer.sdp,
+        headers: {
+          'Authorization': `Bearer ${EPHEMERAL_KEY}`,
+          'Content-Type': 'application/sdp'
+        }
+      });
+      if (!sdpRes.ok) throw new Error(`SDP exchange error: ${sdpRes.status}`);
+      const answer = { type: 'answer', sdp: await sdpRes.text() };
+      await pc.setRemoteDescription(answer);
+      console.log('Voice session established');
+    } catch (err) {
+      console.error('Voice interaction failed:', err);
+      alert('Voice session error: ' + err.message);
+    } finally {
+      voiceBtn.disabled = false;
     }
-    const cards = [];
-    document.querySelectorAll('#cards-container .card').forEach(card => {
-      const titleEl = card.querySelector('strong');
-      const descEl = card.querySelector('p');
-      if (titleEl && descEl) {
-        cards.push({
-          title: titleEl.textContent,
-          description: descEl.textContent
-        });
-      }
-    });
-    if (cards.length === 0) {
-      alert('No analysis available. Please click Get Analysis first.');
-      return;
-    }
-    const utter = new SpeechSynthesisUtterance(
-      cards.map(c => `${c.title}: ${c.description}`).join('. ')
-    );
-    speechSynthesis.speak(utter);
   });
 });

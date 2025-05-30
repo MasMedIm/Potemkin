@@ -3,11 +3,11 @@ import io
 import json
 import base64
 import logging
-import requests
 from flask import Flask, jsonify, send_file, request, send_from_directory
 from reportlab.pdfgen import canvas
 from dotenv import load_dotenv
 import re
+import requests
 from openai import OpenAI
 
 # Load environment and configure
@@ -165,6 +165,89 @@ def call():
     number = data.get('number')
     print(f"Simulating call to {number}")
     return jsonify({"status": "success", "message": f"Simulated call to {number}"})
+ 
+ 
+
+@app.route('/api/voice', methods=['POST'])
+def voice():
+    """
+    Handle text-based voice interactions: receive user transcript, include analysis context, and return AI reply.
+    """
+    data = request.get_json(force=True) or {}
+    user_input = data.get('input', '').strip()
+    if not user_input:
+        return jsonify({'error': 'No input provided'}), 400
+    # Load last analysis run as context
+    path = os.path.join(DATA_DIR, 'last_analysis.json')
+    context = []
+    try:
+        if os.path.exists(path):
+            raw = json.load(open(path, 'r'))
+            # pick last run if list of runs
+            if isinstance(raw, list):
+                if raw and isinstance(raw[0], list):
+                    context = raw[-1]
+                elif raw and isinstance(raw[0], dict):
+                    context = raw
+    except Exception:
+        context = []
+    # Build system prompt
+    sys_prompt = (
+        "You are an AI assistant specialized in construction site monitoring. "
+        f"Here is the latest analysis data: {json.dumps(context)}. "
+        "Answer user questions based on this context."
+    )
+    # Prepare messages
+    client = OpenAI()
+    messages = [
+        {'role': 'system', 'content': sys_prompt},
+        {'role': 'user', 'content': user_input}
+    ]
+    try:
+        completion = client.chat.completions.create(
+            model=os.getenv('OPENAI_MODEL', 'gpt-4o'),
+            messages=messages
+        )
+        reply = completion.choices[0].message.content
+        return jsonify({'reply': reply})
+    except Exception as e:
+        app.logger.error("Voice completion error: %s", e, exc_info=True)
+        return jsonify({'error': 'AI completion failed'}), 502
+
+@app.route('/session', methods=['GET'])
+def session():
+    """
+    Mint an ephemeral API key for OpenAI Realtime (WebRTC) sessions.
+    """
+    api_key = os.getenv('OPENAI_API_KEY')
+    if not api_key:
+        return jsonify({"error": "Server misconfiguration: OPENAI_API_KEY not set"}), 500
+    model = os.getenv('MODEL')
+    voice = os.getenv('VOICE')
+    if not model or not voice:
+        return jsonify({"error": "Server misconfiguration: MODEL or VOICE not set"}), 500
+    url = 'https://api.openai.com/v1/realtime/sessions'
+    headers = {
+        'Authorization': f'Bearer {api_key}',
+        'Content-Type': 'application/json'
+    }
+    payload = { 'model': model, 'voice': voice }
+    # Load custom instructions from instructions.txt, if provided
+    instr_file = os.getenv('INSTRUCTIONS_FILE', 'instructions.txt')
+    try:
+        with open(instr_file, 'r', encoding='utf-8') as f:
+            instr = f.read().strip()
+        if instr:
+            payload['instructions'] = instr
+    except FileNotFoundError:
+        pass
+    try:
+        resp = requests.post(url, headers=headers, json=payload, timeout=10)
+        resp.raise_for_status()
+        return jsonify(resp.json())
+    except Exception as e:
+        app.logger.error("Failed to create realtime session: %s", e, exc_info=True)
+        return jsonify({"error": "Failed to create realtime session"}), 502
 
 if __name__ == '__main__':
     # Internal container port

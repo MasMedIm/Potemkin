@@ -20,8 +20,9 @@ Visiting a construction site in person can be time-consuming and may allow hidde
 - Periodically fetched analysis cards (e.g., building completion stats)  
 - Export a PDF progress report  
 - Text-to-speech voice-over of stats  
-- Simulated call endpoint (stub for Twilio integration)  
-  - Image snapshot analysis using HuggingFace image captioning + OpenAI Chat Completions API (on-demand via 'Get Analysis' button)
+ - Simulated call endpoint (stub for Twilio integration)  
+- Image snapshot analysis using HuggingFace image captioning + OpenAI Chat Completions API (on-demand via 'Get Analysis' button)
+- Voice interaction: WebRTC-based real-time speech-to-speech via OpenAI Realtime API, using your latest analysis data and example Q&A for context; voice style configurable via REALTIME_VOICE (default: alloy)
 
 ## Getting Started
 
