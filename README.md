@@ -21,7 +21,7 @@ Visiting a construction site in person can be time-consuming and may allow hidde
 - Export a PDF progress report  
 - Text-to-speech voice-over of stats  
 - Simulated call endpoint (stub for Twilio integration)  
-- Image snapshot analysis using OpenAI Chat Completions API (on-demand via 'Get Analysis' button)
+  - Image snapshot analysis using HuggingFace image captioning + OpenAI Chat Completions API (on-demand via 'Get Analysis' button)
 
 ## Getting Started
 
@@ -44,14 +44,16 @@ Visiting a construction site in person can be time-consuming and may allow hidde
    ```bash
    pip install -r requirements.txt
    ```  
-5. Copy `.env.example` to `.env` and fill in any credentials if integrating external services, e.g.:  
-   ```ini
-   TWILIO_ACCOUNT_SID=...
-   TWILIO_AUTH_TOKEN=...
-   TWILIO_PHONE_NUMBER=...
-   HOST_PORT=63000    # Host port for Docker mapping
-   OPENAI_API_KEY=... # OpenAI API key for image analysis
-   ```  
+5. Copy `.env.example` to `.env` and fill in any credentials for external services. For example:  
+  ```ini
+  TWILIO_ACCOUNT_SID=...          # (optional) Twilio SID for call simulation
+  TWILIO_AUTH_TOKEN=...           # (optional) Twilio Auth Token
+  TWILIO_PHONE_NUMBER=...         # (optional) Twilio phone number
+  HOST_PORT=63000                 # Host port for Docker mapping (default 5000)
+  OPENAI_API_KEY=...              # OpenAI API key for chat completion
+  HUGGINGFACE_API_KEY=...         # HuggingFace Inference API key for image captioning
+  HUGGINGFACE_MODEL=Salesforce/blip-image-captioning-base  # (optional) caption model, default shown
+  ```  
 
 ### Running the App
 

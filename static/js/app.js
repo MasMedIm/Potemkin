@@ -10,12 +10,15 @@ document.addEventListener('DOMContentLoaded', () => {
     cardsContainer.innerHTML = '<div class="loading">Loading analysis...</div>';
     console.log('---- fetchAnalysis ----');
     try {
-      console.log('Capturing video snapshot...');
-      // Capture video snapshot
+      console.log('Capturing video snapshot (downscaled)...');
       const video = document.getElementById('liveVideo');
+      const maxDim = 512;
+      const vw = video.videoWidth;
+      const vh = video.videoHeight;
+      const scale = Math.min(maxDim / vw, maxDim / vh, 1);
       const canvas = document.createElement('canvas');
-      canvas.width = video.videoWidth;
-      canvas.height = video.videoHeight;
+      canvas.width = Math.floor(vw * scale);
+      canvas.height = Math.floor(vh * scale);
       const ctx = canvas.getContext('2d');
       ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
       const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg'));
@@ -83,11 +86,15 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     try {
       console.log('---- speakStats ----');
-      console.log('Capturing video snapshot for speech...');
+      console.log('Capturing video snapshot for speech (downscaled)...');
       const video = document.getElementById('liveVideo');
+      const maxDim = 512;
+      const vw = video.videoWidth;
+      const vh = video.videoHeight;
+      const scale = Math.min(maxDim / vw, maxDim / vh, 1);
       const canvas = document.createElement('canvas');
-      canvas.width = video.videoWidth;
-      canvas.height = video.videoHeight;
+      canvas.width = Math.floor(vw * scale);
+      canvas.height = Math.floor(vh * scale);
       const ctx = canvas.getContext('2d');
       ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
       const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg'));
@@ -109,7 +116,6 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 
-  // Manual analysis trigger
-  const analyzeBtn = document.getElementById('analyze-btn');
+  // Attach manual analysis trigger
   analyzeBtn.addEventListener('click', fetchAnalysis);
 });
