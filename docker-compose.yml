@@ -1,0 +1,12 @@
+version: '3.8'
+services:
+  potemkin:
+    container_name: potemkin
+    build: .
+    ports:
+      - "${HOST_PORT:-5000}:5000"
+    env_file:
+      - .env
+    volumes:
+      - .:/app
+    restart: unless-stopped
