@@ -21,6 +21,7 @@ Visiting a construction site in person can be time-consuming and may allow hidde
 - Export a PDF progress report  
 - Text-to-speech voice-over of stats  
 - Simulated call endpoint (stub for Twilio integration)  
+- Image snapshot analysis using OpenAI Chat Completions API (on-demand via 'Get Analysis' button)
 
 ## Getting Started
 
@@ -43,14 +44,37 @@ Visiting a construction site in person can be time-consuming and may allow hidde
    ```bash
    pip install -r requirements.txt
    ```  
-5. Copy `.env.example` to `.env` and fill in any credentials if integrating an external service.  
+5. Copy `.env.example` to `.env` and fill in any credentials if integrating external services, e.g.:  
+   ```ini
+   TWILIO_ACCOUNT_SID=...
+   TWILIO_AUTH_TOKEN=...
+   TWILIO_PHONE_NUMBER=...
+   HOST_PORT=63000    # Host port for Docker mapping
+   OPENAI_API_KEY=... # OpenAI API key for image analysis
+   ```  
 
 ### Running the App
 
 ```bash
-python main.py
+python main.py   # or: docker-compose up --build
 ```  
-The server will start on http://localhost:5000. Open that in your browser to see the live stream and analysis feed.
+The server will start on http://localhost:5000 (or http://localhost:${HOST_PORT} if using Docker). Open that in your browser to see:
+  - Live FLV video stream with a "LIVE" indicator
+  - Sidebar goals & dynamic analysis cards (on-demand via 'Get Analysis' button)
+  - Export PDF, call simulation, and text-to-speech controls
+
+### Debugging
+To trace the snapshot → OpenAI flow:
+1. Browser console (F12):
+   - Snapshot capture and size logs
+   - Sending snapshot to `/api/analysis`
+   - Received analysis data
+2. Server logs (`docker-compose logs -f potemkin` or host terminal):
+   - `/api/analysis` call details (method, headers, form/files keys)
+   - Snapshot size received
+   - OpenAI API call status and raw content logged
+   - Final card JSON returned
+   - Final card JSON returned
 
 ## Project Structure
 

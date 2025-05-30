@@ -3,27 +3,55 @@ document.addEventListener('DOMContentLoaded', () => {
   const exportBtn = document.getElementById('export-btn');
   const callBtn = document.getElementById('call-btn');
   const speakBtn = document.getElementById('speak-btn');
+  const analyzeBtn = document.getElementById('analyze-btn');
 
   async function fetchAnalysis() {
+    analyzeBtn.disabled = true;
+    cardsContainer.innerHTML = '<div class="loading">Loading analysis...</div>';
+    console.log('---- fetchAnalysis ----');
     try {
-      const resp = await fetch('/api/analysis');
+      console.log('Capturing video snapshot...');
+      // Capture video snapshot
+      const video = document.getElementById('liveVideo');
+      const canvas = document.createElement('canvas');
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg'));
+      console.log('Snapshot blob size:', blob.size, 'bytes');
+      const form = new FormData();
+      form.append('snapshot', blob, 'snapshot.jpg');
+      console.log('Sending snapshot to /api/analysis');
+      const resp = await fetch('/api/analysis', {
+        method: 'POST',
+        body: form
+      });
       if (!resp.ok) throw new Error(`Status ${resp.status}`);
       const data = await resp.json();
+      console.log('Received analysis data:', data);
       cardsContainer.innerHTML = '';
-      data.forEach(item => {
-        const card = document.createElement('div');
-        card.className = 'card';
-        const title = document.createElement('strong');
-        title.textContent = item.title;
-        const desc = document.createElement('p');
-        desc.style.fontSize = '0.9em';
-        desc.textContent = item.description;
-        card.appendChild(title);
-        card.appendChild(desc);
-        cardsContainer.appendChild(card);
-      });
+      if (Array.isArray(data) && data.length > 0) {
+        data.forEach(item => {
+          const card = document.createElement('div');
+          card.className = 'card';
+          const title = document.createElement('strong');
+          title.textContent = item.title;
+          const desc = document.createElement('p');
+          desc.style.fontSize = '0.9em';
+          desc.textContent = item.description;
+          card.appendChild(title);
+          card.appendChild(desc);
+          cardsContainer.appendChild(card);
+        });
+      } else {
+        cardsContainer.innerHTML = '<div class="no-results">No analysis available.</div>';
+      }
     } catch (err) {
       console.error('Error fetching analysis:', err);
+      cardsContainer.innerHTML = '<div class="error">Error fetching analysis.</div>';
+    } finally {
+      analyzeBtn.disabled = false;
     }
   }
 
@@ -54,18 +82,34 @@ document.addEventListener('DOMContentLoaded', () => {
       return;
     }
     try {
-      const resp = await fetch('/api/analysis');
-      if (!resp.ok) throw new Error();
+      console.log('---- speakStats ----');
+      console.log('Capturing video snapshot for speech...');
+      const video = document.getElementById('liveVideo');
+      const canvas = document.createElement('canvas');
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg'));
+      console.log('Snapshot blob size for speech:', blob.size, 'bytes');
+      const form = new FormData();
+      form.append('snapshot', blob, 'snapshot.jpg');
+      console.log('Sending snapshot to /api/analysis for speech');
+      const resp = await fetch('/api/analysis', { method: 'POST', body: form });
+      if (!resp.ok) throw new Error(`Status ${resp.status}`);
       const data = await resp.json();
+      console.log('Received analysis data for speech:', data);
       const utter = new SpeechSynthesisUtterance(
         data.map(item => `${item.title}: ${item.description}`).join('. ')
       );
       speechSynthesis.speak(utter);
     } catch (err) {
       console.error('Error speaking stats', err);
+      alert('Error performing speech synthesis');
     }
   });
 
-  fetchAnalysis();
-  setInterval(fetchAnalysis, 5000);
+  // Manual analysis trigger
+  const analyzeBtn = document.getElementById('analyze-btn');
+  analyzeBtn.addEventListener('click', fetchAnalysis);
 });
