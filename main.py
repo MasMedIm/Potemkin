@@ -15,6 +15,9 @@ load_dotenv()
 # Debug directory for snapshots and API payloads
 DEBUG_DIR = os.getenv('DEBUG_DIR', 'debug')
 os.makedirs(DEBUG_DIR, exist_ok=True)
+# Data directory for storing analysis results
+DATA_DIR = os.getenv('DATA_DIR', 'data')
+os.makedirs(DATA_DIR, exist_ok=True)
 # Configure logging
 logging.basicConfig(level=logging.DEBUG)
 
@@ -89,6 +92,25 @@ def analysis():
                 "/api/analysis responding with %d cards: %s",
                 len(cards), cards
             )
+            # Persist latest analysis to data directory by appending to run list
+            try:
+                path = os.path.join(DATA_DIR, 'last_analysis.json')
+                runs = []
+                if os.path.exists(path):
+                    with open(path, 'r') as f:
+                        existing = json.load(f)
+                    # Determine if existing is a single run or list of runs
+                    if isinstance(existing, list):
+                        if existing and isinstance(existing[0], list):
+                            runs = existing
+                        else:
+                            runs = [existing]
+                runs.append(cards)
+                with open(path, 'w') as f:
+                    json.dump(runs, f)
+                app.logger.debug("Appended analysis. Total runs: %d, saved to %s", len(runs), path)
+            except Exception as e:
+                app.logger.error("Failed to save analysis data: %s", e)
             return jsonify(cards)
         else:
             app.logger.warning(
@@ -99,6 +121,24 @@ def analysis():
 
 @app.route('/api/export-pdf')
 def export_pdf():
+    # Load latest analysis data (last run) or fallback to stub
+    try:
+        path = os.path.join(DATA_DIR, 'last_analysis.json')
+        with open(path, 'r') as f:
+            data = json.load(f)
+        # Determine if data is list of runs or single run
+        if isinstance(data, list):
+            if data and isinstance(data[0], list):
+                cards = data[-1]
+            elif data and isinstance(data[0], dict):
+                cards = data
+            else:
+                cards = STUB_DATA
+        else:
+            cards = STUB_DATA
+    except Exception:
+        cards = STUB_DATA
+    # Generate PDF report from cards
     buf = io.BytesIO()
     p = canvas.Canvas(buf)
     width, height = 595, 842
@@ -107,8 +147,8 @@ def export_pdf():
     p.drawString(40, y, "Construction Progress Report")
     y -= 40
     p.setFont("Helvetica", 12)
-    for item in STUB_DATA:
-        text = f"{item['title']}: {item['description']}"
+    for item in cards:
+        text = f"{item.get('title', '')}: {item.get('description', '')}"
         p.drawString(40, y, text)
         y -= 20
         if y < 40:
