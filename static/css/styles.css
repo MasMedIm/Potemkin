@@ -1,8 +1,22 @@
+/* Theme Variables */
+:root {
+  --primary-color: #2e2e2e;
+  --primary-hover: #1f1f1f;
+  --secondary-color: #6c757d;
+  --bg-color: #f4f4f4;
+  --text-color: #333;
+  --card-bg: #fff;
+  --card-border: #ddd;
+  --border-radius: 4px;
+  --transition-speed: 0.3s;
+}
 body {
   margin: 0;
-  font-family: sans-serif;
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
   display: flex;
   height: 100vh;
+  background-color: var(--bg-color);
+  color: var(--text-color);
 }
 .stream {
   flex: 2;
@@ -13,17 +27,19 @@ body {
 }
 .analysis {
   flex: 1;
-  background-color: #f4f4f4;
+  background-color: var(--bg-color);
   padding: 1rem;
   display: flex;
   flex-direction: column;
   justify-content: space-between;
 }
 .card {
-  border: 1px solid #ccc;
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+  border-radius: var(--border-radius);
   padding: 1rem;
   margin-bottom: 1rem;
-  background: white;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
 }
 .buttons {
   display: flex;
@@ -33,6 +49,24 @@ body {
 button {
   padding: 0.75rem;
   font-size: 1rem;
+  background-color: var(--primary-color);
+  color: #fff;
+  border: none;
+  border-radius: var(--border-radius);
+  cursor: pointer;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+  transition: background-color var(--transition-speed), transform var(--transition-speed);
+  width: 100%;
+}
+button:hover {
+  background-color: var(--primary-hover);
+}
+button:active {
+  transform: translateY(1px);
+}
+button:focus {
+  outline: 2px solid var(--primary-hover);
+  outline-offset: 2px;
 }
 h2 {
   margin-top: 0;

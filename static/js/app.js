@@ -1,11 +1,12 @@
 document.addEventListener('DOMContentLoaded', () => {
   const cardsContainer = document.getElementById('cards-container');
-  const analyzeBtn = document.getElementById('analyze-btn');
-  const exportBtn = document.getElementById('export-btn');
+  // analyzeBtn removed; analysis polling starts on voice interaction
+  // Export button removed: no PDF export
   const voiceBtn = document.getElementById('voice-btn');
 
+  // capture a frame and send to /api/analysis, return cards array
   async function fetchAnalysis() {
-    analyzeBtn.disabled = true;
+    cardsContainer.innerHTML = '<div class="loading">Loading analysis...</div>';
     cardsContainer.innerHTML = '<div class="loading">Loading analysis...</div>';
     console.log('---- fetchAnalysis ----');
     try {
@@ -25,10 +26,7 @@ document.addEventListener('DOMContentLoaded', () => {
       const form = new FormData();
       form.append('snapshot', blob, 'snapshot.jpg');
       console.log('Sending snapshot to /api/analysis');
-      const resp = await fetch('/api/analysis', {
-        method: 'POST',
-        body: form
-      });
+      const resp = await fetch('/api/analysis', { method: 'POST', body: form });
       if (!resp.ok) throw new Error(`Status ${resp.status}`);
       const data = await resp.json();
       console.log('Received analysis data:', data);
@@ -37,11 +35,8 @@ document.addEventListener('DOMContentLoaded', () => {
         data.forEach(item => {
           const card = document.createElement('div');
           card.className = 'card';
-          const title = document.createElement('strong');
-          title.textContent = item.title;
-          const desc = document.createElement('p');
-          desc.style.fontSize = '0.9em';
-          desc.textContent = item.description;
+          const title = document.createElement('strong'); title.textContent = item.title;
+          const desc = document.createElement('p'); desc.style.fontSize = '0.9em'; desc.textContent = item.description;
           card.appendChild(title);
           card.appendChild(desc);
           cardsContainer.appendChild(card);
@@ -49,21 +44,19 @@ document.addEventListener('DOMContentLoaded', () => {
       } else {
         cardsContainer.innerHTML = '<div class="no-results">No analysis available.</div>';
       }
+      return data;
     } catch (err) {
       console.error('Error fetching analysis:', err);
       cardsContainer.innerHTML = '<div class="error">Error fetching analysis.</div>';
-    } finally {
-      analyzeBtn.disabled = false;
+      return [];
     }
   }
 
-  exportBtn.addEventListener('click', () => {
-    window.location.href = '/api/export-pdf';
-  });
 
 
 
   // Attach manual analysis trigger
+  const analyzeBtn = document.getElementById('analyze-btn');
   analyzeBtn.addEventListener('click', fetchAnalysis);
   // Voice interaction: WebRTC real-time speech-to-speech via OpenAI Realtime API
   voiceBtn.addEventListener('click', async () => {

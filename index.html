@@ -5,8 +5,28 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Potemkin - Drone Live Stream</title>
   <link rel="stylesheet" href="/static/css/styles.css">
-  <!-- flv.js library for FLV playback -->
+  <!-- HLS.js for fMP4/HLS playback, with flv.js fallback -->
+  <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/flv.js/1.6.2/flv.min.js"></script>
+  <!-- suppress noisy AVCDecoderConfigurationRecord logs -->
+  <script>
+    (function() {
+      const origWarn = console.warn.bind(console);
+      console.warn = function(msg, ...args) {
+        if (typeof msg === 'string' && msg.includes('Found another AVCDecoderConfigurationRecord')) {
+          return;
+        }
+        origWarn(msg, ...args);
+      };
+      const origInfo = console.info.bind(console);
+      console.info = function(msg, ...args) {
+        if (typeof msg === 'string' && msg.includes('Parsed AVCDecoderConfigurationRecord')) {
+          return;
+        }
+        origInfo(msg, ...args);
+      };
+    })();
+  </script>
 </head>
 <body>
   <div class="stream">
@@ -16,31 +36,52 @@
   </div>
   <div class="analysis">
     <div>
-      <h2>ANALYSIS</h2>
       <div id="cards-container"></div>
     </div>
     <div class="buttons">
       <button id="analyze-btn">Get Analysis</button>
-      <button id="export-btn">Export to PDF</button>
       <button id="voice-btn">Voice Interaction</button>
     </div>
   </div>
   <script>
     document.addEventListener('DOMContentLoaded', function() {
       var videoElement = document.getElementById('liveVideo');
-      if (flvjs.isSupported()) {
+      // Attempt HLS.js playback for fMP4/HLS streams
         var flvPlayer = flvjs.createPlayer({
           type: 'flv',
-          url: 'http://3.15.151.215:8080/live/streamKey.flv'
+          url: 'http://3.15.151.215:8080/live/streamKey.flv',
+          isLive: true
+        }, {
+          // disable WebWorker to avoid worker runtime errors
+          enableWorker: false,
+          // treat stream as live
+          isLive: true,
+          // drop stash buffer for minimal latency
+          enableStashBuffer: false,
+          stashInitialSize: 32,
+          // lazy load small chunks
+          lazyLoad: true,
+          lazyLoadMaxDuration: 1,
+          lazyLoadRecoverDuration: 1,
+          // disable audio track (won't push audio to MSE)
+          enableAudioTrack: false,
+          // disable audio timestamp gap fixing (no silent-frame generation)
+          fixAudioTimestampGap: false
         });
         flvPlayer.attachMediaElement(videoElement);
         flvPlayer.load();
+        // Periodic seek to live-edge to pin playback without tearing down
+        setInterval(function() {
+          var buffered = videoElement.buffered;
+          if (buffered.length > 0) {
+            var liveTime = buffered.end(buffered.length - 1);
+            console.log('[live-edge flush] seeking to', liveTime);
+            videoElement.currentTime = liveTime;
+          }
+        }, 10000);
         videoElement.addEventListener('playing', function() {
           document.getElementById('live-indicator').style.display = 'block';
         });
-      } else {
-        document.getElementById('video-error').style.display = 'block';
-      }
     });
   </script>
   <script src="/static/js/app.js"></script>

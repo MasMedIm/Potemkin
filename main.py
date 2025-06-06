@@ -12,7 +12,14 @@ import requests
 from openai import OpenAI
 
 # Load environment and configure
+# Load environment and configure
 load_dotenv()
+# Initialize AgentOps for tracing LLM calls (requires AGENTOPS_API_KEY in .env)
+try:
+    import agentops
+    agentops.init(os.getenv('AGENTOPS_API_KEY'))
+except ImportError:
+    logging.warning("agentops not installed; skipping LLM call tracing")
 # Debug directory for snapshots and API payloads
 DEBUG_DIR = os.getenv('DEBUG_DIR', 'debug')
 os.makedirs(DEBUG_DIR, exist_ok=True)
@@ -29,6 +36,20 @@ STUB_DATA = [
     {"title": "BUILDING", "description": "40% completed. Last floor progress updated 2h ago."},
     {"title": "FLOOR", "description": "4th floor under construction. Materials delivered this morning."}
 ]
+# Load image analysis instructions from external file (instruction.md)
+INSTRUCTION_FILE = os.getenv('IMAGE_ANALYSIS_INSTRUCTION_FILE', 'instruction.md')
+try:
+    with open(INSTRUCTION_FILE, 'r') as _f:
+        IMAGE_ANALYSIS_INSTRUCTION = _f.read().strip()
+except Exception as _e:
+    app.logger.warning("Could not load image analysis instructions from %s: %s", INSTRUCTION_FILE, _e)
+    IMAGE_ANALYSIS_INSTRUCTION = (
+        "You are an image analysis assistant specialized in construction site monitoring. "
+        "When provided with an image, analyze it and return a JSON array of objects. "
+        "Each object should have exactly two fields: 'title' (a concise summary) "
+        "and 'description' (a brief explanation). "
+        "Do not include any additional text, commentary, or markdown—only the JSON array."
+    )
 
 def analyze_image_openai(image_bytes):
     """
@@ -37,13 +58,7 @@ def analyze_image_openai(image_bytes):
     client = OpenAI()
     b64 = base64.b64encode(image_bytes).decode('utf-8')
     data_url = f"data:image/jpeg;base64,{b64}"
-    system_prompt = (
-        "You are an image analysis assistant specialized in construction site monitoring. "
-        "Respond with exactly three cards in a JSON array—each an object with 'title' and 'description' only: "
-        "'Progress', 'Safety detection (PPE compliance)', and 'Budgetary risk & outlier detection'. "
-        "Do not include any extra text or markdown. "
-        "For 'Progress', describe only what you see in the image."
-    )
+    system_prompt = IMAGE_ANALYSIS_INSTRUCTION
     user_message = {
         "role": "user",
         "content": [
@@ -51,21 +66,28 @@ def analyze_image_openai(image_bytes):
             {"type": "image_url", "image_url": {"url": data_url}}
         ]
     }
+    # Call OpenAI chat completion
     try:
         completion = client.chat.completions.create(
             model=os.getenv("OPENAI_MODEL", "gpt-4.1"),
             messages=[{"role": "system", "content": system_prompt}, user_message],
         )
-        content = completion.choices[0].message.content
-        app.logger.debug("analyze_image_openai: raw content: %s", content)
-        text = content if isinstance(content, str) else ""
-        json_text = re.sub(r"```json", "", text)
-        json_text = re.sub(r"```", "", json_text).strip()
+    except Exception as e:
+        app.logger.error("analyze_image_openai API error: %s", e, exc_info=True)
+        return STUB_DATA
+    # Extract content
+    content = completion.choices[0].message.content
+    app.logger.debug("analyze_image_openai: raw content: %s", content)
+    text = content if isinstance(content, str) else ""
+    # Attempt to parse JSON; if that fails, return raw text as a single card
+    json_text = re.sub(r"```json", "", text)
+    json_text = re.sub(r"```", "", json_text).strip()
+    try:
         cards = json.loads(json_text)
         return cards
     except Exception as e:
-        app.logger.error("analyze_image_openai error: %s", e, exc_info=True)
-        return STUB_DATA
+        app.logger.error("analyze_image_openai JSON parse error: %s", e, exc_info=True)
+        return [{"title": "Analysis", "description": text}]
 
 @app.route('/')
 def index():
@@ -234,16 +256,10 @@ def voice():
                     context = raw
     except Exception:
         context = []
-    # Build system prompt
-    sys_prompt = (
-        "You are an AI assistant specialized in construction site monitoring. "
-        f"Here is the latest analysis data: {json.dumps(context)}. "
-        "Answer user questions based on this context."
-    )
-    # Prepare messages
+    # Prepare messages using external instructions
     client = OpenAI()
     messages = [
-        {'role': 'system', 'content': sys_prompt},
+        {'role': 'system', 'content': IMAGE_ANALYSIS_INSTRUCTION},
         {'role': 'user', 'content': user_input}
     ]
     try:
@@ -290,21 +306,14 @@ def session():
                     context = raw
     except Exception:
         context = []
-    examples = (
-        "Examples of queries and ideal responses:\n"
-        "1. Q: How is progress going on my apartments at Hunter’s Point?\n"
-        "A: Progress is in line with the original projections, with December 5th 2025 as the current projected completion date. As of today, the project is 55% complete.\n"
-        "2. Q: Have you identified any safety issues in the last week?\n"
-        "A: No OSHA violations were observed. The forecast for the next week is sunny, so I don’t expect any weather-related risks to prepare for.\n"
-        "3. Q: And how are we doing with the budget?\n"
-        "A: We’re projecting total costs at $34.5 million, which is 98% of the original project budget. At this phase, the wood framing was completed last week, so it’s time to put in orders for windows. The current lead time is 3-4 weeks."
-    )
-    sys_prompt = (
-        "You are an AI assistant specialized in construction site monitoring. "
-        f"Use the following analysis data as context: {json.dumps(context)}. "
-        f"{examples}"
-    )
-    payload['instructions'] = sys_prompt
+    # Combine base instructions with latest analysis context for realtime sessions
+    instr = IMAGE_ANALYSIS_INSTRUCTION
+    if context:
+        try:
+            instr += "\n\nLatest analysis data (JSON array of cards):\n" + json.dumps(context)
+        except Exception:
+            pass
+    payload['instructions'] = instr
     try:
         resp = requests.post(url, headers=headers, json=payload, timeout=10)
         resp.raise_for_status()
